@@ -1,0 +1,5 @@
+{
+  "name": "UniversalMetalPriceNormalizer",
+  "description": "Нормализатор прайс-листов металлопроката из ZIP-архивов Excel",
+  "requestFramePermissions": []
+}
