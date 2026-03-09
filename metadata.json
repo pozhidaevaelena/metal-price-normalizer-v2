@@ -1,5 +1,5 @@
 {
-  "name": "UniversalMetalPriceNormalizer",
-  "description": "Нормализатор прайс-листов металлопроката из ZIP-архивов Excel",
+  "name": "MetallA Pro",
+  "description": "Полноценное приложение для расчета смет на металлопрокат с умным поиском и анализом цен",
   "requestFramePermissions": []
 }

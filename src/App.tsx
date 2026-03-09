@@ -333,8 +333,11 @@ export default function App() {
               const valD = row.values[3] ? row.values[3].toString().trim() : '';
               
               if (valA && isCategory(valA, row.values, true)) {
-                currentCategory = valA;
-                normalizedRows.push([currentCategory, '', '', '', 'ПОДКАТЕГОРИЯ']);
+                const cleaned = valA.replace(/\s*\(продолжение\)\s*$/i, '').trim();
+                if (cleaned.toLowerCase() !== currentCategory.toLowerCase()) {
+                  currentCategory = cleaned;
+                  normalizedRows.push([currentCategory, '', '', '', 'ПОДКАТЕГОРИЯ']);
+                }
                 continue;
               }
               
@@ -355,8 +358,11 @@ export default function App() {
                 const valI = row.values[8] ? row.values[8].toString().trim() : '';
                 
                 if (valF && isCategory(valF, row.values, false)) {
-                  currentCategory = valF;
-                  normalizedRows.push([currentCategory, '', '', '', 'ПОДКАТЕГОРИЯ']);
+                  const cleaned = valF.replace(/\s*\(продолжение\)\s*$/i, '').trim();
+                  if (cleaned.toLowerCase() !== currentCategory.toLowerCase()) {
+                    currentCategory = cleaned;
+                    normalizedRows.push([currentCategory, '', '', '', 'ПОДКАТЕГОРИЯ']);
+                  }
                   continue;
                 }
                 

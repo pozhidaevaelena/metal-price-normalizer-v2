@@ -15,6 +15,7 @@
     "@tailwindcss/vite": "^4.1.14",
     "@types/node-fetch": "^2.6.11",
     "@vitejs/plugin-react": "^5.0.4",
+    "adm-zip": "^0.5.16",
     "better-sqlite3": "^12.4.1",
     "clsx": "^2.1.1",
     "dotenv": "^17.2.3",
