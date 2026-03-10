@@ -57,6 +57,7 @@ export default function App() {
     splitTabs: true,
     outputFilename: 'metal_prices_normalized.xlsx'
   });
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -154,10 +155,26 @@ export default function App() {
       const response = await fetch(proxyUrl);
       
       if (!response.ok) {
-        throw new Error(`Ошибка загрузки: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Ошибка прокси (${response.status}): ${errorData.error || response.statusText}`);
       }
       
+      const contentType = response.headers.get('content-type');
+      if (contentType && !contentType.includes('zip') && !contentType.includes('octet-stream') && !contentType.includes('application/x-zip-compressed')) {
+        console.warn('Unexpected content type:', contentType);
+        // Мы все равно попробуем, но предупредим
+      }
+
       const blob = await response.blob();
+      
+      if (blob.size < 1000) {
+        // Слишком маленький файл для ZIP с прайсами, скорее всего это ошибка в виде текста
+        const text = await blob.text();
+        if (text.includes('error') || text.includes('<!DOCTYPE')) {
+          throw new Error('Получен некорректный файл (возможно, ошибка сервера или блокировка)');
+        }
+      }
+
       const fileName = 'metserv.zip';
       const zipFile = new File([blob], fileName, { type: "application/zip" });
       
@@ -614,73 +631,92 @@ export default function App() {
         {/* Settings Panel */}
         <aside className="lg:col-span-4 space-y-6">
           <section className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-            <div className="flex items-center gap-2 mb-6">
-              <Settings size={20} className="text-indigo-600" />
-              <h2 className="font-semibold text-lg">Настройки обработки</h2>
-            </div>
-
-            <div className="space-y-4">
-              <label className="flex items-start gap-3 cursor-pointer group">
-                <div className="relative flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={options.removeHeader}
-                    onChange={e => setOptions(prev => ({ ...prev, removeHeader: e.target.checked }))}
-                    className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-gray-300 bg-white checked:bg-indigo-600 checked:border-indigo-600 transition-all"
-                  />
-                  <CheckCircle2 className="absolute w-5 h-5 text-white scale-0 peer-checked:scale-75 transition-transform left-0" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-700 group-hover:text-indigo-600 transition-colors">Удалить шапку</span>
-                  <span className="text-xs text-gray-400">Пропускает первые 4 строки файла</span>
-                </div>
-              </label>
-
-              <label className="flex items-start gap-3 cursor-pointer group">
-                <div className="relative flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={options.mergeColumns}
-                    onChange={e => setOptions(prev => ({ ...prev, mergeColumns: e.target.checked }))}
-                    className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-gray-300 bg-white checked:bg-indigo-600 checked:border-indigo-600 transition-all"
-                  />
-                  <CheckCircle2 className="absolute w-5 h-5 text-white scale-0 peer-checked:scale-75 transition-transform left-0" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-700 group-hover:text-indigo-600 transition-colors">Объединить G-J в A-D</span>
-                  <span className="text-xs text-gray-400">Переносит данные из правой части таблицы</span>
-                </div>
-              </label>
-
-              <label className="flex items-start gap-3 cursor-pointer group">
-                <div className="relative flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={options.splitTabs}
-                    onChange={e => setOptions(prev => ({ ...prev, splitTabs: e.target.checked }))}
-                    className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-gray-300 bg-white checked:bg-indigo-600 checked:border-indigo-600 transition-all"
-                  />
-                  <CheckCircle2 className="absolute w-5 h-5 text-white scale-0 peer-checked:scale-75 transition-transform left-0" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-700 group-hover:text-indigo-600 transition-colors">Разделить на вкладки</span>
-                  <span className="text-xs text-gray-400">Создает отдельный лист для каждого файла</span>
-                </div>
-              </label>
-
-              <div className="pt-4 border-t border-gray-100">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Название итогового файла</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={options.outputFilename}
-                    onChange={e => setOptions(prev => ({ ...prev, outputFilename: e.target.value }))}
-                    className="w-full pl-3 pr-10 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                  />
-                  <FileText className="absolute right-3 top-2.5 text-gray-400" size={16} />
-                </div>
+            <button 
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="flex items-center justify-between w-full gap-2 mb-2"
+            >
+              <div className="flex items-center gap-2">
+                <Settings size={20} className="text-indigo-600" />
+                <h2 className="font-semibold text-lg">Настройки</h2>
               </div>
-            </div>
+              <span className="text-xs text-indigo-600 hover:underline">
+                {showAdvanced ? 'Скрыть' : 'Показать'}
+              </span>
+            </button>
+
+            <AnimatePresence>
+              {showAdvanced && (
+                <motion.div 
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="space-y-4 pt-4">
+                    <label className="flex items-start gap-3 cursor-pointer group">
+                      <div className="relative flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={options.removeHeader}
+                          onChange={e => setOptions(prev => ({ ...prev, removeHeader: e.target.checked }))}
+                          className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-gray-300 bg-white checked:bg-indigo-600 checked:border-indigo-600 transition-all"
+                        />
+                        <CheckCircle2 className="absolute w-5 h-5 text-white scale-0 peer-checked:scale-75 transition-transform left-0" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-gray-700 group-hover:text-indigo-600 transition-colors">Удалить шапку</span>
+                        <span className="text-xs text-gray-400">Пропускает первые 4 строки файла</span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-3 cursor-pointer group">
+                      <div className="relative flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={options.mergeColumns}
+                          onChange={e => setOptions(prev => ({ ...prev, mergeColumns: e.target.checked }))}
+                          className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-gray-300 bg-white checked:bg-indigo-600 checked:border-indigo-600 transition-all"
+                        />
+                        <CheckCircle2 className="absolute w-5 h-5 text-white scale-0 peer-checked:scale-75 transition-transform left-0" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-gray-700 group-hover:text-indigo-600 transition-colors">Объединить G-J в A-D</span>
+                        <span className="text-xs text-gray-400">Переносит данные из правой части таблицы</span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-3 cursor-pointer group">
+                      <div className="relative flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={options.splitTabs}
+                          onChange={e => setOptions(prev => ({ ...prev, splitTabs: e.target.checked }))}
+                          className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-gray-300 bg-white checked:bg-indigo-600 checked:border-indigo-600 transition-all"
+                        />
+                        <CheckCircle2 className="absolute w-5 h-5 text-white scale-0 peer-checked:scale-75 transition-transform left-0" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-gray-700 group-hover:text-indigo-600 transition-colors">Разделить на вкладки</span>
+                        <span className="text-xs text-gray-400">Создает отдельный лист для каждого файла</span>
+                      </div>
+                    </label>
+
+                    <div className="pt-4 border-t border-gray-100">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Название итогового файла</label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={options.outputFilename}
+                          onChange={e => setOptions(prev => ({ ...prev, outputFilename: e.target.value }))}
+                          className="w-full pl-3 pr-10 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                        />
+                        <FileText className="absolute right-3 top-2.5 text-gray-400" size={16} />
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </section>
 
           {resultBlob && (
@@ -710,65 +746,91 @@ export default function App() {
         {/* Log Area */}
         <section className="lg:col-span-8 flex flex-col h-[calc(100vh-180px)]">
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col h-full overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+            <button 
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 w-full"
+            >
               <div className="flex items-center gap-2">
                 <Layers size={18} className="text-gray-500" />
                 <h2 className="font-semibold text-gray-700">Лог обработки</h2>
               </div>
-              {logs.length > 0 && (
-                <button 
-                  onClick={() => setLogs([])}
-                  className="text-xs text-gray-400 hover:text-red-500 flex items-center gap-1 transition-colors"
-                >
-                  <Trash2 size={14} />
-                  Очистить
-                </button>
-              )}
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-6 space-y-3 font-mono text-sm bg-[#FCFCFD]">
-              {logs.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-4">
-                  <div className="p-4 bg-gray-50 rounded-full">
-                    <Upload size={32} />
-                  </div>
-                  <p className="text-center max-w-xs">
-                    Загрузите ZIP-архив с прайс-листами, чтобы начать процесс нормализации.
-                  </p>
-                </div>
-              ) : (
-                logs.map((log) => (
-                  <motion.div
-                    key={log.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className={cn(
-                      "flex gap-3 p-3 rounded-lg border",
-                      log.type === 'info' && "bg-blue-50/50 border-blue-100 text-blue-800",
-                      log.type === 'success' && "bg-emerald-50/50 border-emerald-100 text-emerald-800",
-                      log.type === 'error' && "bg-red-50/50 border-red-100 text-red-800",
-                      log.type === 'warning' && "bg-amber-50/50 border-amber-100 text-amber-800"
-                    )}
+              <div className="flex items-center gap-4">
+                {logs.length > 0 && (
+                  <span 
+                    onClick={(e) => { e.stopPropagation(); setLogs([]); }}
+                    className="text-xs text-gray-400 hover:text-red-500 flex items-center gap-1 transition-colors"
                   >
-                    <div className="mt-0.5">
-                      {log.type === 'info' && <FileText size={16} />}
-                      {log.type === 'success' && <CheckCircle2 size={16} />}
-                      {log.type === 'error' && <AlertCircle size={16} />}
-                      {log.type === 'warning' && <AlertCircle size={16} />}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex justify-between items-start mb-1">
-                        <span className="font-bold opacity-50 text-[10px] uppercase tracking-wider">
-                          {log.timestamp.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                        </span>
+                    <Trash2 size={14} />
+                    Очистить
+                  </span>
+                )}
+                <span className="text-xs text-indigo-600 hover:underline">
+                  {showAdvanced ? 'Скрыть' : 'Показать'}
+                </span>
+              </div>
+            </button>
+
+            <AnimatePresence>
+              {showAdvanced && (
+                <motion.div 
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="flex-1 overflow-y-auto p-6 space-y-3 font-mono text-sm bg-[#FCFCFD] min-h-[200px]"
+                >
+                  {logs.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-4 py-10">
+                      <div className="p-4 bg-gray-50 rounded-full">
+                        <Upload size={32} />
                       </div>
-                      <p className="leading-relaxed">{log.message}</p>
+                      <p className="text-center max-w-xs">
+                        Логи появятся здесь после начала обработки.
+                      </p>
                     </div>
-                  </motion.div>
-                ))
+                  ) : (
+                    logs.map((log) => (
+                      <motion.div
+                        key={log.id}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className={cn(
+                          "flex gap-3 p-3 rounded-lg border",
+                          log.type === 'info' && "bg-blue-50/50 border-blue-100 text-blue-800",
+                          log.type === 'success' && "bg-emerald-50/50 border-emerald-100 text-emerald-800",
+                          log.type === 'error' && "bg-red-50/50 border-red-100 text-red-800",
+                          log.type === 'warning' && "bg-amber-50/50 border-amber-100 text-amber-800"
+                        )}
+                      >
+                        <div className="mt-0.5">
+                          {log.type === 'info' && <FileText size={16} />}
+                          {log.type === 'success' && <CheckCircle2 size={16} />}
+                          {log.type === 'error' && <AlertCircle size={16} />}
+                          {log.type === 'warning' && <AlertCircle size={16} />}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex justify-between items-start mb-1">
+                            <span className="font-bold opacity-50 text-[10px] uppercase tracking-wider">
+                              {log.timestamp.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            </span>
+                          </div>
+                          <p className="leading-relaxed">{log.message}</p>
+                        </div>
+                      </motion.div>
+                    ))
+                  )}
+                  <div ref={logEndRef} />
+                </motion.div>
               )}
-              <div ref={logEndRef} />
-            </div>
+            </AnimatePresence>
+
+            {!showAdvanced && logs.length > 0 && (
+              <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+                <span className="text-xs text-gray-500 truncate max-w-[80%]">
+                  Последнее: {logs[logs.length - 1].message}
+                </span>
+                {isProcessing && <Loader2 className="animate-spin text-indigo-600" size={14} />}
+              </div>
+            )}
 
             {isProcessing && (
               <div className="px-6 py-4 bg-white border-t border-gray-100">
