@@ -182,7 +182,11 @@ export default function App() {
       addLog(`✅ Файл загружен (${(blob.size / 1024 / 1024).toFixed(2)} MB)`, "success");
       addLog(`Начинаю обработку...`, "info");
       
-      await processZip(zipFile);
+      const finalBlob = await processZip(zipFile);
+      if (finalBlob) {
+        addLog(`🚀 Запускаю скачивание результата...`, "success");
+        triggerDownload(finalBlob, options.outputFilename);
+      }
       
     } catch (error) {
       console.error(error);
@@ -537,27 +541,33 @@ export default function App() {
       });
 
       const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-      setResultBlob(new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      setResultBlob(blob);
       addLog('Все файлы обработаны. Итоговый файл готов!', 'success');
-
+      return blob;
     } catch (error) {
       addLog(`Критическая ошибка: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`, 'error');
+      return null;
     } finally {
       setIsProcessing(false);
       setProgress(100);
     }
   };
 
-  const downloadFile = () => {
-    if (!resultBlob) return;
-    const url = URL.createObjectURL(resultBlob);
+  const triggerDownload = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = options.outputFilename;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const downloadFile = () => {
+    if (!resultBlob) return;
+    triggerDownload(resultBlob, options.outputFilename);
   };
 
   return (
@@ -586,17 +596,6 @@ export default function App() {
             <Globe size={18} />
             Загрузить с mc.ru
           </button>
-          {resultBlob && (
-            <motion.button
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              onClick={downloadFile}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all text-sm font-semibold shadow-lg animate-pulse hover:animate-none"
-            >
-              <Download size={18} />
-              Скачать результат
-            </motion.button>
-          )}
           <button
             onClick={() => fileInputRef.current?.click()}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
@@ -718,29 +717,6 @@ export default function App() {
               )}
             </AnimatePresence>
           </section>
-
-          {resultBlob && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100 shadow-sm"
-            >
-              <h3 className="text-indigo-900 font-semibold mb-2 flex items-center gap-2">
-                <CheckCircle2 size={18} />
-                Результат готов
-              </h3>
-              <p className="text-indigo-700 text-sm mb-4">
-                Все файлы успешно обработаны и объединены в один документ.
-              </p>
-              <button
-                onClick={downloadFile}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-md active:scale-95"
-              >
-                <Download size={20} />
-                Скачать XLSX
-              </button>
-            </motion.div>
-          )}
         </aside>
 
         {/* Log Area */}
