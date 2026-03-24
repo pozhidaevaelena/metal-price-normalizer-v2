@@ -117,6 +117,7 @@ export default function App() {
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [isLogExpanded, setIsLogExpanded] = useState(false);
   const [allSubcategories, setAllSubcategories] = useState<string[]>([]);
+  const [allPriceItems, setAllPriceItems] = useState<PriceItem[]>([]);
   const [availableNames, setAvailableNames] = useState<string[]>([]);
   const [isSubcategoryDropdownOpen, setIsSubcategoryDropdownOpen] = useState(false);
   const [isNameDropdownOpen, setIsNameDropdownOpen] = useState(false);
@@ -160,6 +161,29 @@ export default function App() {
 
   const fetchNames = useCallback(async () => {
     if (!calcSubcategory || !calcParameter) return;
+    
+    // First, try to get from local state (Vercel compatibility)
+    if (allPriceItems.length > 0) {
+      const normalizeParam = (p: string) => String(p).replace(',', '.').trim();
+      const targetParam = normalizeParam(calcParameter);
+      
+      const names = Array.from(new Set(
+        allPriceItems
+          .filter((i: any) => {
+            if (i.subcategory !== calcSubcategory) return false;
+            const itemParams = (i.all_params || (i.param_raw ? i.param_raw.split(';').map((p: string) => p.trim()) : []))
+              .map(normalizeParam);
+            return itemParams.includes(targetParam);
+          })
+          .map((i: any) => i.name)
+      )).sort();
+      
+      if (names.length > 0) {
+        setAvailableNames(names);
+        return;
+      }
+    }
+
     try {
       const res = await fetch('/api/get_names', {
         method: 'POST',
@@ -662,7 +686,15 @@ export default function App() {
           body: JSON.stringify({ items, supplier: supplierName || 'Manual' })
         });
         if (res.ok) {
+          const data = await res.json();
           addLog(`✅ Данные поставщика "${supplierName}" успешно импортированы!`, 'success');
+          if (data.subcategories) {
+            setAllSubcategories(data.subcategories);
+          }
+          if (data.items) {
+            setAllPriceItems(data.items);
+          }
+          fetchDiagnostics();
         } else {
           throw new Error('Ошибка при сохранении в базу');
         }
@@ -1156,6 +1188,13 @@ export default function App() {
           addLog(`📈 Позиций: ${postData.rowCount}`, "info");
           addLog(`💾 Размер JSON: ${postData.sizeKb} KB`, "info");
           if (postData.sample) addLog(`🔍 Пример: ${postData.sample}`, "info");
+          
+          if (postData.subcategories) {
+            setAllSubcategories(postData.subcategories);
+          }
+          if (postData.items) {
+            setAllPriceItems(postData.items);
+          }
           
           fetchDiagnostics(); // Обновляем диагностику
         } else {

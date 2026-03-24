@@ -235,6 +235,7 @@ app.get("/api/proxy", async (req, res) => {
         'Cache-Control': 'no-cache',
         'Pragma': 'no-cache'
       },
+      timeout: 15000, // 15 seconds timeout
       redirect: 'follow'
     });
     
@@ -275,7 +276,7 @@ app.get("/api/prices", (req, res) => {
 
 app.post("/api/update-prices", async (req, res) => {
   try {
-    const zipPath = path.join(process.cwd(), "price.zip");
+    const zipPath = path.join(baseDir, "price.zip");
     if (!fs.existsSync(zipPath)) {
       return res.status(400).json({ error: "price.zip not found in root directory" });
     }
@@ -308,7 +309,11 @@ app.post("/api/save-prices", (req, res) => {
     data.lastUpdated = new Date().toISOString();
 
     fs.writeFileSync(DB_PATH, JSON.stringify(data));
-    res.json({ success: true, count: itemsWithSupplier.length });
+    
+    // Return items and subcategories to help frontend maintain state on Vercel
+    const subcategories = Array.from(new Set(data.items.map((i: any) => i.subcategory))).filter(s => s).sort();
+    
+    res.json({ success: true, count: itemsWithSupplier.length, subcategories, items: data.items });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -316,12 +321,11 @@ app.post("/api/save-prices", (req, res) => {
 
 // Diagnostics endpoint
 app.get("/api/diagnostics", (req, res) => {
-  const dataDir = path.join(process.cwd(), "data");
-  if (!fs.existsSync(dataDir)) {
+  if (!fs.existsSync(DATA_DIR)) {
     return res.json({ error: "Папка data/ не найдена" });
   }
 
-  const files = fs.readdirSync(dataDir).filter(f => f.endsWith('.json'));
+  const files = fs.readdirSync(DATA_DIR).filter(f => f.endsWith('.json'));
   if (files.length === 0) {
     return res.json({ error: "JSON файлы не найдены. Сначала выполните нормализацию." });
   }
@@ -329,8 +333,8 @@ app.get("/api/diagnostics", (req, res) => {
   // Find latest file
   const latestFile = files.map(f => ({
     name: f,
-    path: path.join(dataDir, f),
-    stat: fs.statSync(path.join(dataDir, f))
+    path: path.join(DATA_DIR, f),
+    stat: fs.statSync(path.join(DATA_DIR, f))
   })).sort((a, b) => b.stat.mtime.getTime() - a.stat.mtime.getTime()).pop();
 
   if (!latestFile) return res.json({ error: "Файл не найден" });
@@ -605,7 +609,9 @@ app.post("/api/post-process-excel", upload.single('file'), async (req, res) => {
       jsonPath,
       originalExcel,
       sizeKb: (fs.statSync(jsonPath).size / 1024).toFixed(2),
-      sample: allItems.length > 0 ? `${allItems[0].name} (${allItems[0].subcategory})` : null
+      sample: allItems.length > 0 ? `${allItems[0].name} (${allItems[0].subcategory})` : null,
+      subcategories: Array.from(new Set(allItems.map((i: any) => i.subcategory))).filter(s => s).sort(),
+      items: allItems
     });
 
   } catch (err: any) {
