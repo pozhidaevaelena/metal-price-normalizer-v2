@@ -1,0 +1,27 @@
+{
+  "lastUpdated": "2026-03-11T07:38:00Z",
+  "items": [
+    {
+      "subcategory": "Трубы ВГП черные",
+      "name": "ДУ 15 черн",
+      "param_raw": "2,5 ; 3,2",
+      "all_params": ["2,5", "3,2"],
+      "param_name": "стенка",
+      "unit": "т",
+      "price": 55090,
+      "category": "truby",
+      "supplier": "mc.ru"
+    },
+    {
+      "subcategory": "Арматура А500С",
+      "name": "А500С 12мм",
+      "param_raw": "12",
+      "all_params": ["12"],
+      "param_name": "диаметр",
+      "unit": "т",
+      "price": 62000,
+      "category": "armatura",
+      "supplier": "mc.ru"
+    }
+  ]
+}
