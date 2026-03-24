@@ -10,15 +10,22 @@ import ExcelJS from "exceljs";
 
 const app = express();
 const PORT = 3000;
-const DATA_DIR = path.join(process.cwd(), "data");
-const EXPORTS_DIR = path.join(process.cwd(), "exports");
+
+// Vercel compatibility: use /tmp for storage
+const isVercel = !!process.env.VERCEL;
+const baseDir = isVercel ? '/tmp' : process.cwd();
+
+const DATA_DIR = path.join(baseDir, "data");
+const EXPORTS_DIR = path.join(baseDir, "exports");
+const UPLOADS_DIR = path.join(baseDir, "uploads");
 const DB_PATH = path.join(DATA_DIR, "prices.json");
 
 // Ensure directories exist
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
-if (!fs.existsSync(EXPORTS_DIR)) fs.mkdirSync(EXPORTS_DIR);
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+if (!fs.existsSync(EXPORTS_DIR)) fs.mkdirSync(EXPORTS_DIR, { recursive: true });
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ dest: UPLOADS_DIR });
 
 // Helper to get the latest JSON file from data directory
 const getLatestDbPath = () => {
@@ -233,7 +240,9 @@ app.get("/api/proxy", async (req, res) => {
     
     if (!response.ok) {
       console.error(`Target URL returned ${response.status}: ${response.statusText}`);
-      return res.status(response.status).json({ error: `Target returned ${response.status} (${response.statusText})` });
+      return res.status(response.status).json({ 
+        error: `Target returned ${response.status} (${response.statusText}). The site mc.ru might be blocking the server's IP address.` 
+      });
     }
 
     const contentType = response.headers.get("content-type");
@@ -246,7 +255,11 @@ app.get("/api/proxy", async (req, res) => {
     res.send(Buffer.from(arrayBuffer));
   } catch (error: any) {
     console.error("Proxy error:", error);
-    res.status(500).json({ error: `Failed to fetch target URL: ${error.message}` });
+    let message = error.message;
+    if (message.includes('ETIMEDOUT')) {
+      message = "Connection timed out. The site mc.ru is likely blocking Vercel's IP range. Try downloading the file manually and uploading it.";
+    }
+    res.status(500).json({ error: `Failed to fetch target URL: ${message}` });
   }
 });
 
@@ -628,7 +641,12 @@ app.get("/api/search", (req, res) => {
   });
 });
 
+export { app };
+
 async function startServer() {
+  // Only start the server if we're not on Vercel (where it's handled as a serverless function)
+  if (isVercel) return;
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
