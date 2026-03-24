@@ -282,9 +282,50 @@ app.post("/api/update-prices", async (req, res) => {
     }
     const buffer = fs.readFileSync(zipPath);
     const data = await processZip(buffer);
-    res.json(data);
+    
+    // Return items and subcategories to help frontend maintain state on Vercel
+    const subcategories = Array.from(new Set(data.items.map((i: any) => i.subcategory))).filter(s => s).sort();
+    res.json({ ...data, subcategories });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint to ensure data exists (auto-fetch from mc.ru if missing)
+app.get("/api/ensure-data", async (req, res) => {
+  try {
+    const dbPath = getLatestDbPath();
+    if (fs.existsSync(dbPath)) {
+      const data = JSON.parse(fs.readFileSync(dbPath, "utf-8"));
+      const subcategories = Array.from(new Set(data.items.map((i: any) => i.subcategory))).filter(s => s).sort();
+      return res.json({ ...data, subcategories, source: 'cache' });
+    }
+
+    // Data missing, try to auto-fetch
+    console.log("Data missing, attempting auto-fetch from mc.ru...");
+    const url = "https://mc.ru/prices/metserv.zip";
+    
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Referer': 'https://mc.ru/prices'
+      },
+      timeout: 30000 // 30 seconds for ZIP download
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ZIP: ${response.statusText}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const data = await processZip(buffer);
+    
+    const subcategories = Array.from(new Set(data.items.map((i: any) => i.subcategory))).filter(s => s).sort();
+    res.json({ ...data, subcategories, source: 'auto-fetch' });
+  } catch (err: any) {
+    console.error("Auto-fetch failed:", err);
+    res.status(500).json({ error: `Auto-fetch failed: ${err.message}. Please upload file manually.` });
   }
 });
 

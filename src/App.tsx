@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Tesseract from 'tesseract.js';
+import { get, set } from 'idb-keyval';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -125,6 +126,7 @@ export default function App() {
   const [calcResults, setCalcResults] = useState<{ results_max: any[], results_avg: any[] } | null>(null);
   const [showResults, setShowResults] = useState(false);
   const [errors, setErrors] = useState<Record<string, boolean>>({});
+  const [isDataInitializing, setIsDataInitializing] = useState(false);
 
   // Drawing Calc State
   const [drawingImage, setDrawingImage] = useState<File | null>(null);
@@ -152,11 +154,54 @@ export default function App() {
         if (subsRes.ok) {
           const subs = await subsRes.json();
           setAllSubcategories(subs);
+          set('subcategories', subs);
         }
       }
     } catch (err) {
       setDiagError("Ошибка подключения к серверу");
     }
+  }, []);
+
+  const initializeData = useCallback(async () => {
+    setIsDataInitializing(true);
+    try {
+      // 1. Try to load from IndexedDB first (instant)
+      const cachedItems = await get('priceItems');
+      const cachedSubs = await get('subcategories');
+      
+      if (cachedItems && cachedSubs) {
+        setAllPriceItems(cachedItems);
+        setAllSubcategories(cachedSubs);
+        addLog('Данные загружены из локального кэша', 'success');
+      }
+
+      // 2. Ensure data exists on server and get fresh copy
+      const res = await fetch('/api/ensure-data');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.items) {
+          setAllPriceItems(data.items);
+          set('priceItems', data.items);
+        }
+        if (data.subcategories) {
+          setAllSubcategories(data.subcategories);
+          set('subcategories', data.subcategories);
+        }
+        if (data.source === 'auto-fetch') {
+          addLog('Прайс-лист автоматически обновлен с mc.ru', 'success');
+        }
+        fetchDiagnostics();
+      }
+    } catch (err) {
+      console.error('Failed to initialize data', err);
+      addLog('Не удалось автоматически загрузить прайс-лист', 'error');
+    } finally {
+      setIsDataInitializing(false);
+    }
+  }, [fetchDiagnostics]);
+
+  React.useEffect(() => {
+    initializeData();
   }, []);
 
   const fetchNames = useCallback(async () => {
@@ -690,9 +735,11 @@ export default function App() {
           addLog(`✅ Данные поставщика "${supplierName}" успешно импортированы!`, 'success');
           if (data.subcategories) {
             setAllSubcategories(data.subcategories);
+            set('subcategories', data.subcategories);
           }
           if (data.items) {
             setAllPriceItems(data.items);
+            set('priceItems', data.items);
           }
           fetchDiagnostics();
         } else {
@@ -1191,9 +1238,11 @@ export default function App() {
           
           if (postData.subcategories) {
             setAllSubcategories(postData.subcategories);
+            set('subcategories', postData.subcategories);
           }
           if (postData.items) {
             setAllPriceItems(postData.items);
+            set('priceItems', postData.items);
           }
           
           fetchDiagnostics(); // Обновляем диагностику
@@ -1603,6 +1652,26 @@ export default function App() {
         {activeTab === 'calculator' && (
           <div className="flex-1 overflow-y-auto bg-gray-50" id="calculator-cart">
             <div className="max-w-5xl mx-auto p-8 space-y-8">
+              {/* Data Initialization Banner */}
+              <AnimatePresence>
+                {isDataInitializing && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="bg-amber-50 border border-amber-100 p-4 rounded-3xl flex items-center gap-4 text-amber-900">
+                      <Loader2 className="animate-spin text-amber-600" size={20} />
+                      <div>
+                        <p className="text-sm font-black uppercase tracking-widest">Инициализация данных...</p>
+                        <p className="text-xs opacity-70">Проверяем наличие прайс-листа и загружаем его при необходимости. Это может занять до 30 секунд при первом запуске.</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {/* Diagnostics Block */}
               <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm">
                 <div className="flex items-center justify-between">
